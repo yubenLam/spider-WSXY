@@ -21,13 +21,13 @@ headers_init = {
 }
 cookies_init = {
     'XSRF-TOKEN': '52b80e92-ffbd-4c87-855c-fa8c14201192',
-    'PRODSESSION': '6026214a-742d-4b01-8178-2ff256d2c80a',
+    'PRODSESSION': 'decec979-3b81-45df-8542-1fc5392959d3',
 }
 
 # 全局对象
 session = requests.session()
 course_list = []
-sem = threading.Semaphore(11)  # 线程限制，含main
+sem = threading.Semaphore(6)  # 线程限制，含main
 
 
 # 填充课程信息
@@ -65,7 +65,7 @@ def course_refresh(course):
     }
     refresh_data = session.post(refresh_url, data=data).json()
     course.progress = refresh_data['studyProgress']
-    print("【" + course.name + "】 进度 " + str(course.progress))
+    return course.progress
 
 
 # 播放请求
@@ -105,15 +105,7 @@ def course_save(attempt, nai):
         'terminalType': attempt.terminalType,
     }
     session.cookies.update({'nai': str(nai)})
-    save_data = session.post(save_url, data=data).json()
-
-    # 视频状态： C/已完成，I/待完成
-    rco_status = 'I'
-    for x in save_data:
-        if x['id'] == attempt.rco_id:
-            rco_status = x['status']
-
-    return rco_status
+    session.post(save_url, data=data).json()
 
 
 # 刷课程
@@ -141,13 +133,15 @@ def study(course):
             session_time = '{:0>2d}:{:0>2d}:{:0>2d}'.format(h, m, s)
             attempt.setSessionTime(session_time)
 
-            status = course_save(attempt, int(time.time()) * 1000)
-            if status == "I":
-                course_refresh(course)
+            course_save(attempt, int(time.time()) * 1000)
+
+            course_refresh(course)
+            if course.progress != 100.0:
+                print("【" + course.name + "】 进度 " + str(course.progress))
             else:
                 break
-    sem.release()  # 释放线程
     print("【" + course.name + "】 课程 结束！")
+    sem.release()  # 释放线程
 
 
 if __name__ == '__main__':
@@ -161,7 +155,6 @@ if __name__ == '__main__':
     print('待完成课程数量：' + str(len(course_list)))
 
     # 并行播放
-
     with sem:
         for x in course_list:
             time.sleep(1)
