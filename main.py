@@ -130,7 +130,7 @@ def study(course):
         # 定时保存，随机间隔
         total = h = m = s = 0
         while True:
-            interval = random.randint(60, 120)
+            interval = random.randint(60, 90)
             time.sleep(interval + 1)
             total += interval
 
@@ -167,5 +167,3 @@ if __name__ == '__main__':
             time.sleep(1)
             sem.acquire()  # 获取线程
             threading.Thread(target=study, args=(x, )).start()
-
-    print("专题学习已完成，脚本退出")
