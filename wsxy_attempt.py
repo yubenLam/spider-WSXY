@@ -14,7 +14,7 @@ class Attempt:
         self.token = token  # 验证token
 
         self.sessionTime = "00.00.00"  # 播放时长
-        self.rawStatus = "incomplete"
+        self.rawStatus = "C"
         self.credit = "no-credit"
         self.terminalType = "PC"
 
