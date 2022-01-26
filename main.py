@@ -24,10 +24,10 @@ cookies_init = {
     'PRODSESSION': 'decec979-3b81-45df-8542-1fc5392959d3',
 }
 
-# 全局对象
+sem = threading.Semaphore(6)  # 线程限制，含main
 session = requests.session()
 course_list = []
-sem = threading.Semaphore(6)  # 线程限制，含main
+
 
 
 # 填充课程信息
