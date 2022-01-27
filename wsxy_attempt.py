@@ -1,10 +1,13 @@
 class Attempt:
-    ''' id          记录id
-        subject_id  专题id
-        course_id   课程id
-        rco_id      视频id
-        token       验证token
-    '''
+    """存储播放记录的类，用于发送播放和保存请求。
+
+    Attributes:
+        id: 记录id
+        subject_id: 专题id
+        course_id: 课程id
+        rco_id: 视频id
+        token: 验证token
+    """
 
     def __init__(self, id, subject_id, course_id, rco_id, token):
         self.id = id
