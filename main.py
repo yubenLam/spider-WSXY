@@ -20,79 +20,101 @@ headers_init = {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 }
 cookies_init = {
-    'XSRF-TOKEN': '52b80e92-ffbd-4c87-855c-fa8c14201192',
-    'PRODSESSION': 'decec979-3b81-45df-8542-1fc5392959d3',
+    'XSRF-TOKEN': 'a936023c-8337-4683-bdd7-b88f26d6c1a2',
+    'PRODSESSION': '650f2263-f3a1-4c83-ac4c-d2f4d3098ca8',
 }
 
-sem = threading.Semaphore(6)  # 线程限制，含main
 session = requests.session()
 course_list = []
 
+work_count = 10  # 并发任务数
+sem = threading.Semaphore(work_count + 1)
 
 
-# 填充课程信息
 def fillCourseInfo(course_list):
-    subject_url = '{}/api/learner/subject/{}/courses?status=&groupId=&page=0&size=100&name='.format(
+    """填充课程信息，默认数量100"""
+    url = '{}/api/learner/subject/{}/courses?status=&groupId=&page=0&size=100&name='.format(
         HOST, subject_id)
-    subject_data = session.get(subject_url).json()
-    for x in subject_data['content']:
+    resp = session.get(url=url)
+
+    data = []
+    try:
+        data = resp.json()['content']
+    except Exception as e:
+        print('请求失败 【课程表】 Status: {}, Url: {}, 异常信息: {}'.format(
+            resp.status_code, resp.url, e))
+
+    for x in data:
         if x['progress'] != 100:
             course = Course(x['id'], x['name'], x['progress'],
                             x['offeringCourseId'], subject_id)
             course_list.append(course)
-            print('加入课程：' + course.name)
+            print('新增课程 【{}】'.format(course.name))
+    print('待完成课程数量：' + str(len(course_list)))
 
 
-# 填充视频信息
 def fillRcoInfo(course_list):
+    """填充视频信息"""
     for x in course_list:
-        course_url = '{}/api/learner/course/{}/outline/tree'.format(HOST, x.id)
-        course_data = session.get(course_url).json()
+        url = '{}/api/learner/course/{}/outline/tree'.format(HOST, x.id)
+        resp = session.get(url=url)
+
+        data = []
+        try:
+            data = resp.json()['children']
+        except Exception as e:
+            print('请求失败 【视频信息】 Status: {}, Url: {}, 异常信息: {}'.format(
+                resp.status_code, resp.url, e))
 
         rco_list = []
-        for y in course_data['children']:
-            if y['status'] != 'C':
-                rco_list.append(y['id'])
+        for y in data:
+            rco_list.append(y['id'])
         x.setRcoList(rco_list)
 
 
-# 刷新请求
 def course_refresh(course):
-    refresh_url = '{}/api/learner/course/strategy/refresh'.format(HOST)
+    """刷新请求"""
+    url = '{}/api/learner/course/strategy/refresh'.format(HOST)
     data = {
         'offeringId': course.subject_id,
         'courseId': course.id,
     }
-    refresh_data = session.post(refresh_url, data=data).json()
-    course.progress = refresh_data['studyProgress']
-    return course.progress
+    resp = session.post(url=url, data=data)
+
+    data = resp.json()
+    try:
+        course.progress = data['studyProgress']
+    except Exception as e:
+        print('请求失败 【刷新进度】 Status: {}, Url: {}, 异常信息: {}'.format(
+            resp.status_code, resp.url, e))
 
 
-# 播放请求
 def course_play(course, rco_id, attempt_id):
-    play_url = '{}/learner/play/course/{};classroomId={};rcoId={};courseDetailId={};lookBack=true;isRecord=true;learnerAttemptId={}'.format(
+    """播放请求，一个rco对应一个attempt
+    Args:
+        course: 课程对象
+        rco_id: 视频id
+        attempt_id: “记录”id，由时间戳生成
+    """
+    url = '{}/learner/play/course/{};classroomId={};rcoId={};courseDetailId={};lookBack=true;isRecord=true;learnerAttemptId={}'.format(
         HOST, course.id, course.subject_id, rco_id, course.detail_id,
         attempt_id)
-    session.get(play_url)
+    resp = session.get(url=url)
+
+    if resp.status_code != requests.codes.OK:
+        print('请求失败 【播放】 Status: {}, Url: {}'.format(resp.status_code,
+                                                     resp.url))
+        return False
+    return True
 
 
-# 生成token
-def genToken():
-    s = []
-    hex_digits = "0123456789abcdef"
-    for index in range(36):
-        s.append(hex_digits[math.floor(random.random() * 0x10)])
-    s[14] = "4"
-    s[19] = hex_digits[((hex_digits.index(s[19]) & 0x3) | 0x8)]
-    s[8] = s[13] = s[18] = s[23] = "-"
-    uuid = "".join(s)
-    return uuid
-
-
-# 保存请求
 def course_save(attempt, nai):
-    save_url = '{}/api/learner/play/course/{}/save'.format(
-        HOST, attempt.course_id)
+    """保存请求
+    Args:
+        attempt: “记录”对象
+        nai: 请求时刻，由时间戳生成
+    """
+    url = '{}/api/learner/play/course/{}/save'.format(HOST, attempt.course_id)
     data = {
         'rawStatus': attempt.rawStatus,
         'credit': attempt.credit,
@@ -105,42 +127,64 @@ def course_save(attempt, nai):
         'terminalType': attempt.terminalType,
     }
     session.cookies.update({'nai': str(nai)})
-    session.post(save_url, data=data).json()
+    resp = session.post(url=url, data=data)
+
+    if resp.status_code != requests.codes.OK:
+        print('请求失败 【保存】 Status: {}, Url: {}'.format(resp.status_code,
+                                                     resp.url))
 
 
-# 刷课程
+def genToken():
+    """生成token，规则在js里"""
+    s = []
+    hex_digits = "0123456789abcdef"
+    for index in range(36):
+        s.append(hex_digits[math.floor(random.random() * 0x10)])
+    s[14] = "4"
+    s[19] = hex_digits[((hex_digits.index(s[19]) & 0x3) | 0x8)]
+    s[8] = s[13] = s[18] = s[23] = "-"
+    uuid = "".join(s)
+    return uuid
+
+
+def time_convert(seconds):
+    """时间转换， 秒数--> 01:34:02"""
+    h = seconds // 3600
+    m = (seconds - h * 3600) // 60
+    s = seconds % 60
+    results = '{:0>2d}:{:0>2d}:{:0>2d}'.format(h, m, s)
+    return results
+
+
 def study(course):
-    print("【" + course.name + "】 课程 开始")
+    """学习某个课程，第一个视频刷完所有的进度，其他视频状态直接赋值 “C” """
+    print('【{}】 课程 开始'.format(course.name))
     attempt_id = int(round(time.time() * 1000))
 
     for x in course.rco_list:
-        # 开始播放
-        course_play(course, x, attempt_id)
         attempt = Attempt(attempt_id, course.subject_id, course.id, x,
                           genToken())
 
-        # 定时保存，随机间隔
-        total = h = m = s = 0
-        while True:
-            interval = random.randint(60, 90)
-            time.sleep(interval + 1)
-            total += interval
+        # 开始播放
+        is_start = course_play(course, x, attempt_id)
+        if is_start:
+            # 定时保存
+            total = 0
+            while True:
+                interval = random.randint(60, 90)  # 随机间隔，避免查账
+                time.sleep(interval)
+                total += interval
+                attempt.setSessionTime(time_convert(total))
 
-            h = total // 3600
-            m = (total - h * 3600) // 60
-            s = total % 60
+                course_save(attempt, int(time.time()) * 1000)
 
-            session_time = '{:0>2d}:{:0>2d}:{:0>2d}'.format(h, m, s)
-            attempt.setSessionTime(session_time)
+                course_refresh(course)
+                if course.progress != 100.0:
+                    print('【{}】进度 {}'.format(course.name, course.progress))
+                else:
+                    break
 
-            course_save(attempt, int(time.time()) * 1000)
-
-            course_refresh(course)
-            if course.progress != 100.0:
-                print("【" + course.name + "】 进度 " + str(course.progress))
-            else:
-                break
-    print("【" + course.name + "】 课程 结束！")
+    print('【{}】 课程 结束'.format(course.name))
     sem.release()  # 释放线程
 
 
@@ -152,7 +196,6 @@ if __name__ == '__main__':
     # 填充课程表
     fillCourseInfo(course_list)
     fillRcoInfo(course_list)
-    print('待完成课程数量：' + str(len(course_list)))
 
     # 并行播放
     with sem:
