@@ -6,6 +6,7 @@ class Course:
         name: 课程名称
         progress: 课程进度，统计sessionTime，与视频个数无关
         detail_id: 详情页id
+        subject_id: 专题id
     """
 
     def __init__(self, id, name, progress, detail_id, subject_id):
