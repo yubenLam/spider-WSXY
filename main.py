@@ -7,9 +7,9 @@ import random
 from wsxy_course import Course
 from wsxy_attempt import Attempt
 
-# 自行更改必要信息
+# 常用信息
 HOST = "http://wsxy.chinaunicom.cn"
-subject_id = 49658011
+subject_id = 49649837
 headers_init = {
     'Accept-Encoding': 'gzip, deflate, br',
     'Connection': 'keep-alive',
@@ -21,13 +21,13 @@ headers_init = {
 }
 cookies_init = {
     'XSRF-TOKEN': 'a936023c-8337-4683-bdd7-b88f26d6c1a2',
-    'PRODSESSION': '650f2263-f3a1-4c83-ac4c-d2f4d3098ca8',
+    'PRODSESSION': '650f2263-f3a1-4c83-ac4c-d2f4d3098ca1',
 }
 
 session = requests.session()
 course_list = []
 
-work_count = 10  # 并发任务数
+work_count = 4  # 并发任务数
 sem = threading.Semaphore(work_count + 1)
 
 
@@ -37,14 +37,14 @@ def fillCourseInfo(course_list):
         HOST, subject_id)
     resp = session.get(url=url)
 
-    data = []
+    rs = []
     try:
-        data = resp.json()['content']
+        rs = resp.json()['content']
     except Exception as e:
         print('请求失败 【课程表】 Status: {}, Url: {}, 异常信息: {}'.format(
             resp.status_code, resp.url, e))
 
-    for x in data:
+    for x in rs:
         if x['progress'] != 100:
             course = Course(x['id'], x['name'], x['progress'],
                             x['offeringCourseId'], subject_id)
@@ -59,15 +59,15 @@ def fillRcoInfo(course_list):
         url = '{}/api/learner/course/{}/outline/tree'.format(HOST, x.id)
         resp = session.get(url=url)
 
-        data = []
+        rs = []
         try:
-            data = resp.json()['children']
+            rs = resp.json()['children']
         except Exception as e:
             print('请求失败 【视频信息】 Status: {}, Url: {}, 异常信息: {}'.format(
                 resp.status_code, resp.url, e))
 
         rco_list = []
-        for y in data:
+        for y in rs:
             rco_list.append(y['id'])
         x.setRcoList(rco_list)
 
@@ -81,9 +81,9 @@ def course_refresh(course):
     }
     resp = session.post(url=url, data=data)
 
-    data = resp.json()
+    rs = resp.json()
     try:
-        course.progress = data['studyProgress']
+        course.progress = rs['studyProgress']
     except Exception as e:
         print('请求失败 【刷新进度】 Status: {}, Url: {}, 异常信息: {}'.format(
             resp.status_code, resp.url, e))
